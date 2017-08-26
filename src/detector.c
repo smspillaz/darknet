@@ -534,7 +534,7 @@ void print_detections(image im,
             if(top < 0) top = 0;
             if(bot > im.h-1) bot = im.h-1;
 
-            printf("%s, %s, %.0f%%, %i, %i, %i, %i\n",
+            printf("%s, %s, %f, %i, %i, %i, %i\n",
                    current_filename,
                    names[class],
                    prob,
