@@ -588,10 +588,6 @@ void testmany_detector(char *datacfg,
         free_image(sized);
         free(boxes);
         free_ptrs((void **)probs, l.w*l.h*l.n);
-#ifdef OPENCV
-        cvWaitKey(0);
-        cvDestroyAllWindows();
-#endif
     }
 }
 
