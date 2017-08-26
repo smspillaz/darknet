@@ -507,6 +507,94 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     }
 }
 
+void print_detections(image im,
+                      int   num,
+                      float thresh,
+                      box   *boxes,
+                      float **probs,
+                      char  **names,
+                      int   classes,
+                      const char  *current_filename)
+{
+    int i = 0;
+
+    for(; i < num; ++i){
+        int class = max_index(probs[i], classes);
+        float prob = probs[i][class];
+        if(prob > thresh){
+            box b = boxes[i];
+
+            int left  = (b.x-b.w/2.)*im.w;
+            int right = (b.x+b.w/2.)*im.w;
+            int top   = (b.y-b.h/2.)*im.h;
+            int bot   = (b.y+b.h/2.)*im.h;
+
+            if(left < 0) left = 0;
+            if(right > im.w-1) right = im.w-1;
+            if(top < 0) top = 0;
+            if(bot > im.h-1) bot = im.h-1;
+
+            printf("%s, %s, %.0f%%, %i, %i, %i, %i\n",
+                   current_filename,
+                   names[class],
+                   prob,
+                   left,
+                   right,
+                   top,
+                   bot);
+        }
+    }
+}
+
+void testmany_detector(char *datacfg,
+                       char *cfgfile,
+                       char *weightfile,
+                       char **argv,
+                       int curr_argc,
+                       int argc,
+                       float thresh) {
+    list *options = read_data_cfg(datacfg);
+    char *name_list = option_find_str(options, "names", "data/names.list");
+    char **names = get_labels(name_list);
+
+    network net = parse_network_cfg(cfgfile);
+    if(weightfile){
+        load_weights(&net, weightfile);
+    }
+    set_batch_network(&net, 1);
+    srand(2222222);
+    clock_t time;
+    int j;
+    float nms=.4;
+    for (; curr_argc < argc; curr_argc++) {
+        char *input = argv[curr_argc];
+        image im = load_image_color(input,0,0);
+        image sized = resize_image(im, net.w, net.h);
+        layer l = net.layers[net.n-1];
+
+        box *boxes = calloc(l.w*l.h*l.n, sizeof(box));
+        float **probs = calloc(l.w*l.h*l.n, sizeof(float *));
+        for(j = 0; j < l.w*l.h*l.n; ++j) probs[j] = calloc(l.classes, sizeof(float *));
+
+        float *X = sized.data;
+        time=clock();
+        network_predict(net, X);
+        get_region_boxes(l, 1, 1, thresh, probs, boxes, 0, 0);
+        if (nms) do_nms_sort(boxes, probs, l.w*l.h*l.n, l.classes, nms);
+
+        print_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, l.classes, input);
+
+        free_image(im);
+        free_image(sized);
+        free(boxes);
+        free_ptrs((void **)probs, l.w*l.h*l.n);
+#ifdef OPENCV
+        cvWaitKey(0);
+        cvDestroyAllWindows();
+#endif
+    }
+}
+
 void run_detector(int argc, char **argv)
 {
 	char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
@@ -548,6 +636,7 @@ void run_detector(int argc, char **argv)
     char *weights = (argc > 5) ? argv[5] : 0;
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh);
+    if(0==strcmp(argv[2], "testmany")) testmany_detector(datacfg, cfg, weights, argv, 6, argc, thresh);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);
